@@ -1,256 +1,229 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { GameState, Obstacle, Particle, DifficultyLevel } from '@/types/game';
+import { GameState, Obstacle, Particle, Character } from '@/types/game';
 import { characters } from '@/data/characters';
-import { difficultySettings, getDifficultyForTime } from '@/data/difficulty';
-import { toast } from '@/hooks/use-toast';
+import { getDifficultyConfig, getDifficultyForTime } from '@/data/difficulty';
+import { toast } from 'sonner';
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
 const PLAYER_SIZE = 40;
 const OBSTACLE_WIDTH = 80;
+const OBSTACLE_GAP = 180;
 
 export const useGameState = () => {
   const [gameState, setGameState] = useState<GameState>({
-    isPlaying: false,
-    isGameOver: false,
-    showCharacterSelect: true,
     playerY: CANVAS_HEIGHT / 2,
     playerVelocity: 0,
     obstacles: [],
     score: 0,
     highScore: parseInt(localStorage.getItem('flappyHighScore') || '0'),
+    isPlaying: false,
+    isGameOver: false,
+    showCharacterSelect: true,
     selectedCharacter: characters[0],
     difficulty: 'easy',
     gameStartTime: 0,
-    lastDifficultyChange: 0,
   });
 
   const [particles, setParticles] = useState<Particle[]>([]);
   const gameLoopRef = useRef<number>();
-  const frameCountRef = useRef(0);
+  const lastObstacleX = useRef(CANVAS_WIDTH);
+  const lastDifficultyChange = useRef(0);
 
-  const createParticle = useCallback((x: number, y: number, color: string): Particle => {
-    return {
-      x,
-      y,
-      vx: (Math.random() - 0.5) * 4,
-      vy: (Math.random() - 0.5) * 4,
-      life: 1,
-      maxLife: 1,
-      color,
-    };
-  }, []);
-
-  const updateParticles = useCallback(() => {
-    setParticles(prev => 
-      prev
-        .map(particle => ({
-          ...particle,
-          x: particle.x + particle.vx,
-          y: particle.y + particle.vy,
-          life: particle.life - 0.02,
-        }))
-        .filter(particle => particle.life > 0)
-    );
-  }, []);
-
-  const checkDifficultyProgression = useCallback((currentTime: number, currentDifficulty: DifficultyLevel) => {
-    const newDifficulty = getDifficultyForTime(currentTime);
+  const createObstacle = useCallback((difficulty: 'easy' | 'medium' | 'hard'): Obstacle => {
+    const config = getDifficultyConfig(difficulty);
+    const gapStart = Math.random() * (CANVAS_HEIGHT - config.gapSize - 100) + 50;
     
-    if (newDifficulty !== currentDifficulty) {
-      console.log(`Difficulty changed from ${currentDifficulty} to ${newDifficulty}`);
-      
-      // Show toast notification for difficulty change
-      const difficultyNames = {
-        easy: 'Easy Mode',
-        medium: 'Medium Mode',
-        hard: 'Hard Mode'
-      };
-      
-      toast({
-        title: `Difficulty Increased!`,
-        description: `Now playing on ${difficultyNames[newDifficulty]}`,
-        duration: 3000,
-      });
-      
-      return newDifficulty;
-    }
-    
-    return currentDifficulty;
-  }, []);
-
-  const createObstacle = useCallback((difficulty: DifficultyLevel): Obstacle => {
-    const settings = difficultySettings[difficulty];
-    const gapStart = Math.random() * (CANVAS_HEIGHT - settings.gapSize - 100) + 50;
+    console.log(`Creating obstacle with difficulty: ${difficulty}, gap size: ${config.gapSize}`);
     
     return {
       x: CANVAS_WIDTH,
       topHeight: gapStart,
-      bottomHeight: CANVAS_HEIGHT - gapStart - settings.gapSize,
+      bottomHeight: CANVAS_HEIGHT - gapStart - config.gapSize,
       passed: false,
     };
   }, []);
 
-  const checkCollision = useCallback((playerY: number, obstacles: Obstacle[]): boolean => {
-    // Check bounds
-    if (playerY < 0 || playerY + PLAYER_SIZE > CANVAS_HEIGHT) {
-      return true;
-    }
+  const createParticle = useCallback((x: number, y: number, color: string): Particle => ({
+    x,
+    y,
+    vx: (Math.random() - 0.5) * 4,
+    vy: (Math.random() - 0.5) * 4,
+    life: 1,
+    maxLife: 1,
+    color,
+  }), []);
 
-    // Check obstacle collision
-    for (const obstacle of obstacles) {
-      if (obstacle.x < 120 + PLAYER_SIZE && obstacle.x + OBSTACLE_WIDTH > 120) {
-        if (playerY < obstacle.topHeight || playerY + PLAYER_SIZE > CANVAS_HEIGHT - obstacle.bottomHeight) {
-          return true;
-        }
-      }
-    }
+  const updateDifficulty = useCallback(() => {
+    if (!gameState.isPlaying || gameState.gameStartTime === 0) return;
 
-    return false;
-  }, []);
-
-  const gameLoop = useCallback(() => {
-    setGameState(prevState => {
-      if (!prevState.isPlaying || prevState.isGameOver) {
-        return prevState;
-      }
-
-      const currentTime = Date.now() - prevState.gameStartTime;
-      const newDifficulty = checkDifficultyProgression(currentTime, prevState.difficulty);
-      const settings = difficultySettings[newDifficulty];
-
-      // Update player physics
-      const newPlayerVelocity = prevState.playerVelocity + settings.gravity;
-      const newPlayerY = prevState.playerY + newPlayerVelocity;
-
-      // Update obstacles
-      let newObstacles = prevState.obstacles
-        .map(obstacle => ({ ...obstacle, x: obstacle.x - settings.obstacleSpeed }))
-        .filter(obstacle => obstacle.x > -OBSTACLE_WIDTH);
-
-      // Add new obstacles
-      frameCountRef.current++;
-      if (frameCountRef.current % settings.spawnRate === 0) {
-        newObstacles.push(createObstacle(newDifficulty));
-      }
-
-      // Check for scoring
-      let newScore = prevState.score;
-      newObstacles = newObstacles.map(obstacle => {
-        if (!obstacle.passed && obstacle.x + OBSTACLE_WIDTH < 120) {
-          newScore++;
-          return { ...obstacle, passed: true };
-        }
-        return obstacle;
-      });
-
-      // Add trail particles
-      if (frameCountRef.current % 3 === 0) {
-        setParticles(prev => [
-          ...prev,
-          createParticle(120, newPlayerY + 20, prevState.selectedCharacter.trailColor),
-        ]);
-      }
-
-      // Check collision
-      const collision = checkCollision(newPlayerY, newObstacles);
-
-      if (collision) {
-        console.log('Collision detected - game over');
-        const newHighScore = Math.max(newScore, prevState.highScore);
-        localStorage.setItem('flappyHighScore', newHighScore.toString());
-        
-        return {
-          ...prevState,
-          isGameOver: true,
-          score: newScore,
-          highScore: newHighScore,
-        };
-      }
-
-      return {
-        ...prevState,
-        playerY: newPlayerY,
-        playerVelocity: newPlayerVelocity,
-        obstacles: newObstacles,
-        score: newScore,
-        difficulty: newDifficulty,
-      };
-    });
-
-    updateParticles();
+    const currentTime = Date.now() - gameState.gameStartTime;
+    const newDifficulty = getDifficultyForTime(currentTime);
     
-    if (!gameState.isGameOver) {
-      gameLoopRef.current = requestAnimationFrame(gameLoop);
+    if (newDifficulty !== gameState.difficulty) {
+      console.log(`Difficulty changed from ${gameState.difficulty} to ${newDifficulty}`);
+      
+      setGameState(prev => ({ ...prev, difficulty: newDifficulty }));
+      
+      // Show toast notification
+      const difficultyNames = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+      toast.success(`Difficulty increased to ${difficultyNames[newDifficulty]}!`, {
+        duration: 2000,
+      });
+      
+      lastDifficultyChange.current = currentTime;
     }
-  }, [gameState.isGameOver, checkCollision, createObstacle, createParticle, updateParticles, checkDifficultyProgression]);
-
-  const startGame = useCallback(() => {
-    console.log('Starting game with easy difficulty');
-    frameCountRef.current = 0;
-    setGameState(prev => ({
-      ...prev,
-      isPlaying: true,
-      isGameOver: false,
-      showCharacterSelect: false,
-      playerY: CANVAS_HEIGHT / 2,
-      playerVelocity: 0,
-      obstacles: [],
-      score: 0,
-      difficulty: 'easy',
-      gameStartTime: Date.now(),
-      lastDifficultyChange: Date.now(),
-    }));
-    setParticles([]);
-  }, []);
+  }, [gameState.difficulty, gameState.isPlaying, gameState.gameStartTime]);
 
   const jump = useCallback(() => {
     if (!gameState.isPlaying || gameState.isGameOver) return;
     
-    console.log('Player jumped');
+    console.log('Player jumping');
     setGameState(prev => ({
       ...prev,
-      playerVelocity: -8,
+      playerVelocity: -8, // Reduced from -12 to -8 for more controlled jumps
     }));
 
-    // Add jump particles
-    setParticles(prev => [
-      ...prev,
-      ...Array.from({ length: 5 }, () => 
-        createParticle(120, gameState.playerY + 20, gameState.selectedCharacter.trailColor)
-      ),
-    ]);
+    // Create jump particles
+    const newParticles: Particle[] = [];
+    for (let i = 0; i < 5; i++) {
+      newParticles.push(createParticle(
+        120,
+        gameState.playerY + 20,
+        gameState.selectedCharacter.trailColor
+      ));
+    }
+    setParticles(prev => [...prev, ...newParticles]);
   }, [gameState.isPlaying, gameState.isGameOver, gameState.playerY, gameState.selectedCharacter.trailColor, createParticle]);
 
-  const gameOver = useCallback(() => {
-    console.log('Game over function called');
-    if (gameLoopRef.current) {
-      cancelAnimationFrame(gameLoopRef.current);
-    }
-  }, []);
+  const gameLoop = useCallback(() => {
+    setGameState(prev => {
+      if (!prev.isPlaying || prev.isGameOver) return prev;
 
-  const resetGame = useCallback(() => {
-    console.log('Resetting game to character select');
-    if (gameLoopRef.current) {
-      cancelAnimationFrame(gameLoopRef.current);
+      const newState = { ...prev };
+      const config = getDifficultyConfig(prev.difficulty);
+
+      // Apply gravity (reduced for better control)
+      newState.playerVelocity += 0.5; // Reduced from 0.8 to 0.5 for gentler gravity
+      newState.playerY += newState.playerVelocity;
+
+      // Check boundaries
+      if (newState.playerY < 0 || newState.playerY > CANVAS_HEIGHT - PLAYER_SIZE) {
+        console.log('Player hit boundary');
+        newState.isGameOver = true;
+        return newState;
+      }
+
+      // Update obstacles
+      newState.obstacles = prev.obstacles.map(obstacle => ({
+        ...obstacle,
+        x: obstacle.x - config.obstacleSpeed,
+      })).filter(obstacle => obstacle.x > -OBSTACLE_WIDTH);
+
+      // Add new obstacles
+      if (lastObstacleX.current <= CANVAS_WIDTH - config.obstacleSpacing) {
+        newState.obstacles.push(createObstacle(prev.difficulty));
+        lastObstacleX.current = CANVAS_WIDTH;
+      } else {
+        lastObstacleX.current -= config.obstacleSpeed;
+      }
+
+      // Check collisions
+      for (const obstacle of newState.obstacles) {
+        if (
+          120 + PLAYER_SIZE > obstacle.x &&
+          120 < obstacle.x + OBSTACLE_WIDTH &&
+          (newState.playerY < obstacle.topHeight ||
+            newState.playerY + PLAYER_SIZE > CANVAS_HEIGHT - obstacle.bottomHeight)
+        ) {
+          console.log('Collision detected');
+          newState.isGameOver = true;
+          break;
+        }
+
+        // Score when passing obstacle
+        if (!obstacle.passed && obstacle.x + OBSTACLE_WIDTH < 120) {
+          obstacle.passed = true;
+          newState.score += 1;
+          console.log('Score increased to:', newState.score);
+        }
+      }
+
+      return newState;
+    });
+
+    // Update particles
+    setParticles(prev => prev.map(particle => ({
+      ...particle,
+      x: particle.x + particle.vx,
+      y: particle.y + particle.vy,
+      life: particle.life - 0.02,
+    })).filter(particle => particle.life > 0));
+
+    // Update difficulty
+    updateDifficulty();
+
+    if (gameState.isPlaying && !gameState.isGameOver) {
+      gameLoopRef.current = requestAnimationFrame(gameLoop);
     }
+  }, [gameState.isPlaying, gameState.isGameOver, createObstacle, updateDifficulty]);
+
+  const startGame = useCallback(() => {
+    console.log('Starting new game');
     setGameState(prev => ({
       ...prev,
-      isPlaying: false,
-      isGameOver: false,
-      showCharacterSelect: true,
       playerY: CANVAS_HEIGHT / 2,
       playerVelocity: 0,
       obstacles: [],
       score: 0,
+      isPlaying: true,
+      isGameOver: false,
+      showCharacterSelect: false,
       difficulty: 'easy',
-      gameStartTime: 0,
-      lastDifficultyChange: 0,
+      gameStartTime: Date.now(),
     }));
     setParticles([]);
+    lastObstacleX.current = CANVAS_WIDTH;
+    lastDifficultyChange.current = 0;
   }, []);
 
-  const selectCharacter = useCallback((character: typeof characters[0]) => {
+  const gameOver = useCallback(() => {
+    console.log('Game over triggered');
+    setGameState(prev => {
+      const newHighScore = Math.max(prev.score, prev.highScore);
+      if (newHighScore > prev.highScore) {
+        localStorage.setItem('flappyHighScore', newHighScore.toString());
+        console.log('New high score:', newHighScore);
+      }
+      
+      return {
+        ...prev,
+        isPlaying: false,
+        highScore: newHighScore,
+      };
+    });
+  }, []);
+
+  const resetGame = useCallback(() => {
+    console.log('Resetting game to character select');
+    setGameState(prev => ({
+      ...prev,
+      playerY: CANVAS_HEIGHT / 2,
+      playerVelocity: 0,
+      obstacles: [],
+      score: 0,
+      isPlaying: false,
+      isGameOver: false,
+      showCharacterSelect: true,
+      difficulty: 'easy',
+      gameStartTime: 0,
+    }));
+    setParticles([]);
+    lastObstacleX.current = CANVAS_WIDTH;
+    lastDifficultyChange.current = 0;
+  }, []);
+
+  const selectCharacter = useCallback((character: Character) => {
     console.log('Character selected:', character.name);
     setGameState(prev => ({
       ...prev,
