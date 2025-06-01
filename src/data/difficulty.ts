@@ -1,63 +1,56 @@
-import { DifficultySettings, DifficultyLevel } from '@/types/game';
+export type Difficulty = 'easy' | 'medium' | 'hard';
 
-export const difficultySettings: Record<DifficultyLevel, DifficultySettings> = {
+export interface DifficultyConfig {
+  obstacleSpeed: number;
+  obstacleSpacing: number;
+  gapSize: number;
+  spawnRate: number;
+}
+
+export const difficultyConfigs: Record<Difficulty, DifficultyConfig> = {
   easy: {
     obstacleSpeed: 2,
     obstacleSpacing: 300,
     gapSize: 200,
-    spawnRate: 180, // frames between obstacles
-    gravity: 0.4,
+    spawnRate: 150,
   },
   medium: {
-    obstacleSpeed: 3.5,
+    obstacleSpeed: 3,
     obstacleSpacing: 280,
-    gapSize: 170,
-    spawnRate: 150,
-    gravity: 0.5,
+    gapSize: 180,
+    spawnRate: 130,
   },
   hard: {
-    obstacleSpeed: 5,
+    obstacleSpeed: 4,
     obstacleSpacing: 250,
-    gapSize: 140,
-    spawnRate: 120,
-    gravity: 0.6,
+    gapSize: 160,
+    spawnRate: 110,
   },
 };
 
-export const getDifficultyForTime = (gameTimeMs: number): DifficultyLevel => {
-  const gameTimeSeconds = gameTimeMs / 1000;
-  
-  if (gameTimeSeconds < 60) {
-    return 'easy';
-  } else if (gameTimeSeconds < 120) {
-    return 'medium';
-  } else {
-    return 'hard';
-  }
+export const getDifficultyConfig = (difficulty: Difficulty): DifficultyConfig => {
+  return difficultyConfigs[difficulty];
 };
 
-export const getDifficultyDisplayName = (difficulty: DifficultyLevel): string => {
-  switch (difficulty) {
-    case 'easy':
-      return 'Easy Mode';
-    case 'medium':
-      return 'Medium Mode';
-    case 'hard':
-      return 'Hard Mode';
-    default:
-      return 'Easy Mode';
-  }
+export const getDifficultyForTime = (gameTime: number): Difficulty => {
+  if (gameTime < 60000) return 'easy';
+  if (gameTime < 120000) return 'medium';
+  return 'hard';
 };
 
-export const getDifficultyColor = (difficulty: DifficultyLevel): string => {
+export const getDifficultyDisplayName = (difficulty: Difficulty): string => {
+  return difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+};
+
+export const getDifficultyColor = (difficulty: Difficulty): string => {
   switch (difficulty) {
     case 'easy':
-      return '#10b981'; // green
+      return '#22c55e'; // green
     case 'medium':
-      return '#f59e0b'; // yellow
+      return '#eab308'; // yellow
     case 'hard':
       return '#ef4444'; // red
     default:
-      return '#10b981';
+      return '#ffffff';
   }
 };
