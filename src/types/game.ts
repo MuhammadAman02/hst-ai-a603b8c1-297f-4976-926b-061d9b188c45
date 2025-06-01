@@ -2,25 +2,12 @@ export interface Character {
   id: string;
   name: string;
   icon: string;
+  description: string;
   color: string;
   trailColor: string;
-  description: string;
-}
-
-export interface GameState {
-  isPlaying: boolean;
-  isGameOver: boolean;
-  score: number;
-  highScore: number;
-  playerY: number;
-  playerVelocity: number;
-  obstacles: Obstacle[];
-  selectedCharacter: Character;
-  showCharacterSelect: boolean;
 }
 
 export interface Obstacle {
-  id: string;
   x: number;
   topHeight: number;
   bottomHeight: number;
@@ -28,7 +15,6 @@ export interface Obstacle {
 }
 
 export interface Particle {
-  id: string;
   x: number;
   y: number;
   vx: number;
@@ -36,4 +22,29 @@ export interface Particle {
   life: number;
   maxLife: number;
   color: string;
+}
+
+export type DifficultyLevel = 'easy' | 'medium' | 'hard';
+
+export interface DifficultySettings {
+  obstacleSpeed: number;
+  obstacleSpacing: number;
+  gapSize: number;
+  spawnRate: number;
+  gravity: number;
+}
+
+export interface GameState {
+  isPlaying: boolean;
+  isGameOver: boolean;
+  showCharacterSelect: boolean;
+  playerY: number;
+  playerVelocity: number;
+  obstacles: Obstacle[];
+  score: number;
+  highScore: number;
+  selectedCharacter: Character;
+  difficulty: DifficultyLevel;
+  gameStartTime: number;
+  lastDifficultyChange: number;
 }
