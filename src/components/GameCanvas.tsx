@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { GameState, Particle } from '@/types/game';
+import { getDifficultyDisplayName, getDifficultyColor, getDifficultyForTime } from '@/data/difficulty';
 
 interface GameCanvasProps {
   gameState: GameState;
@@ -100,6 +101,38 @@ const GameCanvas = ({ gameState, particles, onJump }: GameCanvasProps) => {
     ctx.fillText(gameState.score.toString(), canvas.width / 2, 60);
     ctx.shadowBlur = 0;
 
+    // Draw difficulty indicator
+    if (gameState.isPlaying && gameState.gameStartTime > 0) {
+      const currentTime = Date.now() - gameState.gameStartTime;
+      const timeSeconds = Math.floor(currentTime / 1000);
+      const nextDifficultyTime = gameState.difficulty === 'easy' ? 60 : gameState.difficulty === 'medium' ? 120 : null;
+      
+      // Difficulty label
+      ctx.font = 'bold 20px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = getDifficultyColor(gameState.difficulty);
+      ctx.shadowColor = '#000000';
+      ctx.shadowBlur = 3;
+      ctx.fillText(getDifficultyDisplayName(gameState.difficulty), 20, 40);
+      
+      // Time display
+      ctx.font = '16px Arial';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(`Time: ${timeSeconds}s`, 20, 65);
+      
+      // Next difficulty countdown
+      if (nextDifficultyTime) {
+        const timeToNext = nextDifficultyTime - timeSeconds;
+        if (timeToNext > 0) {
+          const nextDifficulty = gameState.difficulty === 'easy' ? 'Medium' : 'Hard';
+          ctx.fillStyle = '#fbbf24';
+          ctx.fillText(`${nextDifficulty} in: ${timeToNext}s`, 20, 85);
+        }
+      }
+      
+      ctx.shadowBlur = 0;
+    }
+
   }, [gameState, particles]);
 
   const handleCanvasClick = () => {
@@ -128,8 +161,9 @@ const GameCanvas = ({ gameState, particles, onJump }: GameCanvasProps) => {
           className="border-4 border-blue-400 rounded-lg shadow-2xl cursor-pointer glow-animation"
           style={{ maxWidth: '100%', height: 'auto' }}
         />
-        <div className="absolute top-4 left-4 text-white">
+        <div className="absolute top-4 right-4 text-white text-right">
           <p className="text-sm opacity-75">Click or press SPACE to jump</p>
+          <p className="text-xs opacity-60 mt-1">Difficulty increases every minute</p>
         </div>
       </div>
     </div>
