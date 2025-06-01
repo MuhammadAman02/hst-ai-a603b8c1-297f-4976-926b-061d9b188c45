@@ -1,0 +1,6 @@
+[
+  {
+    "role": "user",
+    "content": "The deployment failed with the following error from Fly.io:\n\n#10 5.541 error during build:\n#10 5.541 src/hooks/useGameState.ts (4:9): \"getDifficultyConfig\" is not exported by \"src/data/difficulty.ts\", imported by \"src/hooks/useGameState.ts\".\n#10 5.541 file: /app/src/hooks/useGameState.ts:4:9\n\nPlease fix the issue."
+  }
+]
